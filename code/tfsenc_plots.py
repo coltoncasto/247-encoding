@@ -38,7 +38,9 @@ def extract_correlations(args, directory_list, file_str=None):
     """
 
     # Load the subject's electrode file
-    electrode_list = load_pickle(args.electrode_file).values()
+    electrode_list = list(load_pickle(args.electrode_file).values())
+    if args.electrodes is not None:
+        electrode_list = [electrode_list[idx-1] for idx in args.electrodes]
 
     all_corrs = []
     for dir in directory_list:
@@ -89,7 +91,7 @@ def parse_arguments():
     parser.add_argument('--input-directory', nargs='*', type=str, default=None)
     parser.add_argument('--labels', nargs='*', type=str, default=None)
     parser.add_argument('--embedding-type', type=str, default=None)
-    parser.add_argument('--electrodes', nargs='*', type=int)
+    parser.add_argument('--electrodes', nargs='*', type=int, default=[])
     parser.add_argument('--output-file-name', type=str, default=None)
 
     group = parser.add_mutually_exclusive_group()
@@ -121,7 +123,7 @@ def set_plot_styles(args):
     linestyles = ['-', '--', ':']
     color = ['b', 'r']
 
-    linestyles = linestyles[0:len(args.labels)] * 2
+    linestyles = linestyles[0:len(args.labels)]# * 2
     color = np.repeat(color[0:len(args.labels)], len(args.labels))
 
     return (color, linestyles)
@@ -141,7 +143,7 @@ def plot_data(args, data, pp, title=None):
 
     fig, ax = plt.subplots()
     color, linestyles = set_plot_styles(args)
-    ax.set_prop_cycle(color=color, linestyle=linestyles)
+    # ax.set_prop_cycle(color=color, linestyle=linestyles)
     ax.plot(lags, data.T, linewidth=0.75)
     ax.legend(set_legend_labels(args), frameon=False)
     ax.set(xlabel=r'\textit{lag (s)}',
