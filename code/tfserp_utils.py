@@ -23,55 +23,28 @@ def build_Y(onsets, brain_signal, lags, window_size):
         [type]: [description]
     """
 
-    half_window = round((window_size / 1000) * 512 / 2)
+    half_window = round((window_size * 512) / 2)
     t = len(brain_signal)
 
-    Y1 = np.zeros((len(onsets), len(lags), 2 * half_window + 1))
+    Y1 = np.zeros((len(onsets), half_window * 2 + 1))
 
-    for lag in prange(len(lags)):
-        lag_amount = int(lags[lag] / 1000 * 512)
-
-        index_onsets = np.minimum(
+    index_onsets = np.minimum(
             t - half_window - 1,
             np.maximum(half_window + 1,
-                       np.round_(onsets, 0, onsets) + lag_amount))
+                       np.round_(onsets, 0, onsets)))
 
-        # subtracting 1 from starts to account for 0-indexing
-        starts = index_onsets - half_window - 1
-        stops = index_onsets + half_window
+    # subtracting 1 from starts to account for 0-indexing
+    starts = index_onsets - half_window - 1
+    stops = index_onsets + half_window
 
-        # vec = brain_signal[np.array([np.arange(*item) for item in zip(starts, stops)])]
+    for i, (start, stop) in enumerate(zip(starts, stops)):
+            Y1[i, :] = brain_signal[start:stop].reshape(-1)
 
-        for i, (start, stop) in enumerate(zip(starts, stops)):
-            Y1[i, lag, :] = brain_signal[start:stop].reshape(-1)
 
     return Y1
 
 
-def build_XY(args, datum, brain_signal):
-    """[summary]
-
-    Args:
-        args ([type]): [description]
-        datum ([type]): [description]
-        brain_signal ([type]): [description]
-
-    Returns:
-        [type]: [description]
-    """
-    X = np.stack(datum.embeddings).astype('float64')
-
-    onsets = datum.onset.values
-
-    lags = np.array(args.lags)
-    brain_signal = brain_signal.reshape(-1, 1)
-
-    Y = build_Y(onsets, brain_signal, lags, args.window_size)
-
-    return X, Y
-
-
-def encode_lags_numba(args, X, Y):
+def encode_lags_numba(args, Y):
     """[summary]
     Args:
         X ([type]): [description]
@@ -85,12 +58,13 @@ def encode_lags_numba(args, X, Y):
     if args.phase_shuffle:
         Y = phase_randomize(Y)
 
-    Y = np.mean(Y, axis=-1)
+    Y_mean = np.mean(Y, axis=0)
+    Y_sem = np.std(Y, axis=0, ddof=1) / np.sqrt(Y.shape[1])
 
-    return 
+    return Y_mean, Y_sem
 
 
-def run_save_permutation(args, prod_X, prod_Y, filename):
+def run_save_permutation(args, prod_Y, filename):
     """[summary]
 
     Args:
@@ -99,16 +73,20 @@ def run_save_permutation(args, prod_X, prod_Y, filename):
         prod_Y ([type]): [description]
         filename ([type]): [description]
     """
-    if prod_X.shape[0]:
-        perm_prod = []
-        for _ in range(args.npermutations):
-            perm_rc = encode_lags_numba(args, prod_X, prod_Y)
-            perm_prod.append(perm_rc)
+    perm_prod_mean = []
+    perm_prod_sem = []
+    for _ in range(args.npermutations):
+        perm_mean, perm_sem = encode_lags_numba(args, prod_Y)
+        perm_prod_mean.append(perm_mean)
+        perm_prod_sem.append(perm_sem)
 
-        perm_prod = np.stack(perm_prod)
-        with open(filename, 'w') as csvfile:
-            csvwriter = csv.writer(csvfile)
-            csvwriter.writerows(perm_prod)
+    perm_prod_mean = np.stack(perm_prod_mean)
+    perm_prod_sem = np.stack(perm_prod_sem)
+
+    output = np.concatenate(perm_prod_mean, perm_prod_sem)
+    with open(filename, 'w') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerows(output)
 
 
 def load_header(conversation_dir, subject_id):
@@ -162,11 +140,11 @@ def encoding_regression(args, sid, datum, elec_signal, name):
     print(f'{sid} {name} Prod: {len(prod_Y)} Comp: {len(comp_Y)}')
 
     # Run permutation and save results
-    filename = os.path.join(output_dir, name + '_prod.csv')
-    run_save_permutation(args, prod_X, prod_Y, filename)
+    filename = os.path.join(output_dir, name + '_prod.csv') 
+    run_save_permutation(args, prod_Y, filename)
 
     filename = os.path.join(output_dir, name + '_comp.csv')
-    run_save_permutation(args, comp_X, comp_Y, filename)
+    run_save_permutation(args, comp_Y, filename)
 
     return
 

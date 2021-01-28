@@ -9,7 +9,7 @@ DT := $(shell date +"%Y%m%d-%H%M")
 
 # 625 Electrode IDs
 E_LIST := $(shell seq 15 15)
-E_LIST := 11 17
+E_LIST := 11 17 20
 
 # 676 Electrode IDs
 # E_LIST := $(shell seq 1 1)
@@ -42,18 +42,18 @@ MWF := 1
 WV := all
 
 # Choose whether to label or phase shuffle
-SH := --shuffle
+# SH := --shuffle
 # PSH := --phase-shuffle
 
 # Choose whether to PCA the embeddings before regressing or not
-# PCA := --pca-flag
+PCA := --pca-flag
 PCA_TO := 50
 
 # Choose the command to run: python runs locally, echo is for debugging, sbatch
 # is for running on SLURM all lags in parallel.
 CMD := echo
 CMD := sbatch submit1.sh
-CMD := python
+# CMD := python
 
 
 # -----------------------------------------------------------------------------
@@ -125,13 +125,13 @@ plot-encoding1:
 			--sid $(SID) \
 			--electrodes $(E_LIST) \
 			--input-directory \
-				20210125-2054-u_zz-w_200-v_all-625-gpt2-cnxt-1024-pca_50d \
-				20210125-2106-u_zz-w_200-v_all-625-glove50-cnxt-1024-pca_0d \
+				20210128-1020-shuf-u_ca-w_200-v_all-625-gpt2-cnxt-1024-pca_0d \
+				20210128-1035-ca-200ms-all-625-glove50-cnxt-1024-pca_0d \
 			--labels \
-				gpt2-cnxt-pca50d \
-				glove-pca50d \
+				gpt2-cnxt \
+				glove \
 			--output-file-name \
-				'$(DT)-$(SID)-gpt2_glove_50d'
+				'$(DT)-$(SID)-gpt2_glove_test'
 
 # -----------------------------------------------------------------------------
 #  Misc. targets
