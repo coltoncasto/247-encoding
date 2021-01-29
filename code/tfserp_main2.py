@@ -10,7 +10,7 @@ from scipy.io import loadmat
 
 from tfsenc_pca import run_pca
 from tfsenc_read_datum import read_datum
-from tfsenc_utils import encoding_regression, load_header, setup_environ
+from tfserp_utils import encoding_regression, load_header, setup_environ
 
 
 def load_pickle(file):
@@ -35,7 +35,7 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--word-value', type=str, default='all')
-    parser.add_argument('--window-size', type=int, default=2)
+    parser.add_argument('--window-size', type=int, default=4)
 
     group1 = parser.add_mutually_exclusive_group()
     group1.add_argument('--shuffle', action='store_true', default=False)
@@ -61,6 +61,9 @@ def parse_arguments():
 
     parser.add_argument('--align-with', type=str, default=None)
     parser.add_argument('--align-target-context-length', type=int, default=0)
+
+    parser.add_argument('--split-flag', action='store_true', default=False)
+    parser.add_argument('--split-by', type=str, default=None)
 
     args = parser.parse_args()
 

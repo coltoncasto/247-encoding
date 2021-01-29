@@ -1,5 +1,6 @@
 # Non-configurable paramters. Don't touch.
 FILE := tfsenc_main
+FILE_ERP := tfserp_main2
 USR := $(shell whoami | head -c 2)
 DT := $(shell date +"%Y%m%d-%H%M")
 
@@ -8,8 +9,8 @@ DT := $(shell date +"%Y%m%d-%H%M")
 # -----------------------------------------------------------------------------
 
 # 625 Electrode IDs
-E_LIST := $(shell seq 15 15)
-E_LIST := 11 17 20
+E_LIST := $(shell seq 1 55)
+# E_LIST := 11 17 20
 
 # 676 Electrode IDs
 # E_LIST := $(shell seq 1 1)
@@ -29,6 +30,7 @@ EMB := gpt2
 
 # Choose the window size to average for each point
 WS := 200
+WS_ERP := 4
 CNXT_LEN := 1024
 
 # Choose to align the vocab with another set of embeddings
@@ -46,14 +48,19 @@ WV := all
 # PSH := --phase-shuffle
 
 # Choose whether to PCA the embeddings before regressing or not
-PCA := --pca-flag
+# PCA := --pca-flag
 PCA_TO := 50
+
+# Choose how to split the datum, which subset to look at
+SPLIT := --split-flag
+SPLIT_BY := correct
+# SPLIT_BY := incorrect
 
 # Choose the command to run: python runs locally, echo is for debugging, sbatch
 # is for running on SLURM all lags in parallel.
 CMD := echo
 CMD := sbatch submit1.sh
-# CMD := python
+CMD := python
 
 
 # -----------------------------------------------------------------------------
@@ -116,7 +123,7 @@ pca-on-embedding:
 			--reduce-to $(EMB_RED_DIM);
 
 # -----------------------------------------------------------------------------
-# Plotting
+# Plotting encoding
 # -----------------------------------------------------------------------------
 
 plot-encoding1:
@@ -132,6 +139,84 @@ plot-encoding1:
 				glove \
 			--output-file-name \
 				'$(DT)-$(SID)-gpt2_glove_test'
+
+# -----------------------------------------------------------------------------
+# ERP
+# -----------------------------------------------------------------------------
+
+# Run the encoding model for the given electrodes in one swoop
+# Note that the code will add the subject, embedding type, and PCA details to
+# the output folder name
+run-erp:
+	mkdir -p logs
+	$(CMD) code/$(FILE_ERP).py \
+		--sid $(SID) \
+		--electrodes $(E_LIST) \
+		--emb-type $(EMB) \
+		--context-length $(CNXT_LEN) \
+		--align-with $(ALIGN_WITH) \
+		--align-target-context-length $(ALIGN_TGT_CNXT_LEN) \
+		--window-size $(WS_ERP) \
+		--word-value $(WV) \
+		--npermutations $(NPERM) \
+		--lags $(LAGS) \
+		--min-word-freq $(MWF) \
+		$(PCA) \
+		--reduce-to $(PCA_TO) \
+		$(SH) \
+		$(PSH) \
+		$(SPLIT) \
+		--split-by $(SPLIT_BY) \
+		--output-prefix $(DT)-$(USR)-$(WS_ERP)ms-$(WV)-$(SPLIT_BY); \
+
+
+# Run the encoding model for the given electrodes __one at a time__, ideally
+# with slurm so it's all parallelized.
+run-erp-slurm:
+	mkdir -p logs
+	for elec in $(E_LIST); do \
+		$(CMD) code/$(FILE_ERP).py \
+			--sid $(SID) \
+			--electrodes $$elec \
+			--emb-type $(EMB) \
+			--context-length $(CNXT_LEN) \
+			--align-with $(ALIGN_WITH) \
+			--align-target-context-length $(ALIGN_TGT_CNXT_LEN) \
+			--window-size $(WS_ERP) \
+			--word-value $(WV) \
+			--npermutations $(NPERM) \
+			--lags $(LAGS) \
+			--min-word-freq $(MWF) \
+			$(PCA) \
+			--reduce-to $(PCA_TO) \
+			$(SH) \
+			$(PSH) \
+			--output-prefix $(DT)-$(USR)-$(WS_ERP)ms-$(WV)-$(SPLIT_BY); \
+	done
+
+pca-on-embedding-erp:
+	python code/tfsenc_pca.py \
+			--sid $(SID) \
+			--emb-type $(EMB) \
+			--context-length $(CNXT_LEN) \
+			--reduce-to $(EMB_RED_DIM);
+
+# -----------------------------------------------------------------------------
+# Plotting ERP
+# -----------------------------------------------------------------------------
+
+plot-erp:
+	mkdir -p results/erp/figures
+	python code/tfserp_plots.py \
+			--sid $(SID) \
+			--electrodes $(E_LIST) \
+			--input-directory \
+				20210129-1210-shuf-u_ca-w_4-v_all-625-gpt2-cnxt-1024-pca_50d \
+			--labels \
+				erp \
+			--output-file-name \
+				'$(DT)-$(SID)-erp-test'
+
 
 # -----------------------------------------------------------------------------
 #  Misc. targets

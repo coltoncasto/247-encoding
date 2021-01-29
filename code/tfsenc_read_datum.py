@@ -62,4 +62,13 @@ def read_datum(args):
     if args.emb_type == 'glove50':
         df['embeddings'] = df['glove50_embeddings']
 
+    df['top1_pred'] = df['top1_pred'].str.strip().str.lower()
+
+    import pdb; pdb.set_trace()
+    if args.split_flag:
+        if 'correct' == args.split_by:
+            df = df[df.word == df.top1_pred]
+        elif 'incorrect' == args.split_by:
+            df = df[df.word != df.top1_pred]
+
     return df

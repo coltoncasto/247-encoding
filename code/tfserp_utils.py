@@ -59,7 +59,7 @@ def encode_lags_numba(args, Y):
         Y = phase_randomize(Y)
 
     Y_mean = np.mean(Y, axis=0)
-    Y_sem = np.std(Y, axis=0, ddof=1) / np.sqrt(Y.shape[1])
+    Y_sem = np.std(Y, axis=0, ddof=1) / np.sqrt(Y.shape[0])
 
     return Y_mean, Y_sem
 
@@ -83,7 +83,9 @@ def run_save_permutation(args, prod_Y, filename):
     perm_prod_mean = np.stack(perm_prod_mean)
     perm_prod_sem = np.stack(perm_prod_sem)
 
-    output = np.concatenate(perm_prod_mean, perm_prod_sem)
+    # import pdb; pdb.set_trace()
+
+    output = np.concatenate((perm_prod_mean, perm_prod_sem))
     with open(filename, 'w') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerows(output)
@@ -175,7 +177,7 @@ def setup_environ(args):
     args.signal_file = '_'.join([str(args.sid), 'trimmed_signal.pkl'])
     args.electrode_file = '_'.join([str(args.sid), 'electrode_names.pkl'])
 
-    args.output_dir = os.path.join(os.getcwd(), 'results')
+    args.output_dir = os.path.join(os.getcwd(), 'results/erp/')
     args.full_output_dir = create_output_directory(args)
 
     vars(args).update(path_dict)
