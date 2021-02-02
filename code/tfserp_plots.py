@@ -142,20 +142,23 @@ def plot_data(args, data, pp, sem, title=None):
 
     fig, ax = plt.subplots()
     
-    ax.set_prop_cycle(color=['b','r'])
+    ax.set_prop_cycle(color=['b','c','r','m'], linestyle=['-','-','-','-'])
     ax.plot(lags, data.T, linewidth=.75)
     ax.legend(set_legend_labels(args), frameon=False)
     ax.set(xlabel=r'\textit{onset (s)}',
            ylabel=r'\textit{event-related potential}',
            title=title)
-    ax.set_ylim(-5, 40)
-    ax.vlines(0, -5, 40, 'k', linestyles='dashed', linewidth=1)
+    ax.set_ylim(-.2, 1)
+    ax.vlines(0, -.2, 1, 'k', linestyles='dashed', linewidth=1)
 
-    
     plt.fill_between(lags, data.T[:,0]-sem.T[:,0], data.T[:,0]+sem.T[:,0], 
                      color='b', alpha=0.3)
     plt.fill_between(lags, data.T[:,1]-sem.T[:,1], data.T[:,1]+sem.T[:,1], 
+                     color='c', alpha=0.3)
+    plt.fill_between(lags, data.T[:,2]-sem.T[:,2], data.T[:,2]+sem.T[:,2], 
                      color='r', alpha=0.3)
+    plt.fill_between(lags, data.T[:,3]-sem.T[:,3], data.T[:,3]+sem.T[:,3], 
+                     color='m', alpha=0.3)
 
     pp.savefig(fig)
     plt.close()

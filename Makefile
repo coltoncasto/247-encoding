@@ -9,7 +9,7 @@ DT := $(shell date +"%Y%m%d-%H%M")
 # -----------------------------------------------------------------------------
 
 # 625 Electrode IDs
-E_LIST := $(shell seq 1 55)
+E_LIST := $(shell seq 1 63)
 # E_LIST := 11 17 20
 
 # 676 Electrode IDs
@@ -17,6 +17,7 @@ E_LIST := $(shell seq 1 55)
 
 # Choose the subject to run for
 SID := 625
+SID := 676
 
 NPERM := 1
 
@@ -26,7 +27,7 @@ LAGS := {-5000..5000..25}
 
 # Choose which set of embeddings to use
 EMB := glove50
-EMB := gpt2
+EMB := gpt2-xl
 
 # Choose the window size to average for each point
 WS := 200
@@ -54,7 +55,7 @@ PCA_TO := 50
 # Choose how to split the datum, which subset to look at
 SPLIT := --split-flag
 SPLIT_BY := correct
-# SPLIT_BY := incorrect
+SPLIT_BY := incorrect
 
 # Choose the command to run: python runs locally, echo is for debugging, sbatch
 # is for running on SLURM all lags in parallel.
@@ -211,11 +212,13 @@ plot-erp:
 			--sid $(SID) \
 			--electrodes $(E_LIST) \
 			--input-directory \
-				20210129-1210-shuf-u_ca-w_4-v_all-625-gpt2-cnxt-1024-pca_50d \
+				20210201-1705-ca-4ms-all-correct-676-gpt2-xl-cnxt-1024-pca_0d \
+				20210201-1725-ca-4ms-all-incorrect-676-gpt2-xl-cnxt-1024-pca_0d \
 			--labels \
-				erp \
+				erp-correct \
+				erp-incorrect \
 			--output-file-name \
-				'$(DT)-$(SID)-erp-test'
+				'$(DT)-$(SID)-erp-correct-incorrect'
 
 
 # -----------------------------------------------------------------------------

@@ -7,6 +7,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
+from scipy import stats
 
 from tfsenc_pca import run_pca
 from tfsenc_read_datum import read_datum
@@ -87,10 +88,15 @@ def load_electrode_data(args, elec_id):
 
     all_signal = []
     for convo in convos:
+        
+        if '.pkl' in convo:
+            continue 
+        
         file = glob.glob(
             os.path.join(convo, 'preprocessed',
                          '*' + str(elec_id) + '.mat'))[0]
         mat_signal = loadmat(file)['p1st']
+        mat_signal = stats.zscore(mat_signal)
 
         if mat_signal is None:
             continue
@@ -119,7 +125,7 @@ def process_subjects(args, datum):
         if elec_name is None:
             print(f'Electrode ID {elec_id} does not exist')
             continue
-
+        
         elec_signal = load_electrode_data(args, elec_id)
 
         encoding_regression(args, args.sid, datum, elec_signal, elec_name)

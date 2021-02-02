@@ -48,9 +48,10 @@ def read_datum(args):
     df = pd.DataFrame.from_dict(datum)
     df = drop_nan_embeddings(df)
 
+
     # use columns where token is root
     if 'gpt2' in [args.align_with, args.emb_type]:
-        df = df[df['gpt2_token_is_root']]
+        df = df[df['gpt2-xl_token_is_root']]
     elif 'bert' in [args.align_with, args.emb_type]:
         df = df[df['bert_token_is_root']]
     else:
@@ -62,9 +63,10 @@ def read_datum(args):
     if args.emb_type == 'glove50':
         df['embeddings'] = df['glove50_embeddings']
 
-    df['top1_pred'] = df['top1_pred'].str.strip().str.lower()
+    # remove prefix space
+    df['top1_pred'] = df['top1_pred'].str.strip()
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     if args.split_flag:
         if 'correct' == args.split_by:
             df = df[df.word == df.top1_pred]
