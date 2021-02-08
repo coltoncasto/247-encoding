@@ -9,15 +9,16 @@ DT := $(shell date +"%Y%m%d-%H%M")
 # -----------------------------------------------------------------------------
 
 # 625 Electrode IDs
-E_LIST := $(shell seq 1 63)
+E_LIST := $(shell seq 1 55)
 # E_LIST := 11 17 20
 
 # 676 Electrode IDs
 # E_LIST := $(shell seq 1 1)
+# E_LIST := $(shell seq 1 63)
 
 # Choose the subject to run for
 SID := 625
-SID := 676
+# SID := 676
 
 NPERM := 1
 
@@ -27,7 +28,7 @@ LAGS := {-5000..5000..25}
 
 # Choose which set of embeddings to use
 EMB := glove50
-EMB := gpt2-xl
+# EMB := gpt2-xl
 
 # Choose the window size to average for each point
 WS := 200
@@ -35,7 +36,7 @@ WS_ERP := 4
 CNXT_LEN := 1024
 
 # Choose to align the vocab with another set of embeddings
-ALIGN_WITH := gpt2
+ALIGN_WITH := gpt2-xl
 ALIGN_TGT_CNXT_LEN := 1024
 
 # Specify the minimum word frequency
@@ -89,7 +90,9 @@ run-encoding:
 		--reduce-to $(PCA_TO) \
 		$(SH) \
 		$(PSH) \
-		--output-prefix $(DT)-shuf-u_$(USR)-w_$(WS)-v_$(WV); \
+		$(SPLIT) \
+		--split-by $(SPLIT_BY) \
+		--output-prefix $(DT)-$(USR)-$(WS)ms-$(WV)-$(SPLIT_BY); \
 
 
 # Run the encoding model for the given electrodes __one at a time__, ideally
@@ -113,7 +116,9 @@ run-encoding-slurm:
 			--reduce-to $(PCA_TO) \
 			$(SH) \
 			$(PSH) \
-			--output-prefix $(DT)-$(USR)-$(WS)ms-$(WV); \
+			$(SPLIT) \
+			--split-by $(SPLIT_BY) \
+			--output-prefix $(DT)-$(USR)-$(WS)ms-$(WV)-$(SPLIT_BY); \
 	done
 
 pca-on-embedding:
@@ -133,13 +138,13 @@ plot-encoding1:
 			--sid $(SID) \
 			--electrodes $(E_LIST) \
 			--input-directory \
-				20210128-1020-shuf-u_ca-w_200-v_all-625-gpt2-cnxt-1024-pca_0d \
-				20210128-1035-ca-200ms-all-625-glove50-cnxt-1024-pca_0d \
+				20210208-1451-ca-200ms-all-correct-625-glove50-cnxt-1024-pca_0d \
+				20210208-1449-ca-200ms-all-incorrect-625-glove50-cnxt-1024-pca_0d \
 			--labels \
-				gpt2-cnxt \
-				glove \
+				enc-correct \
+				enc-incorrect \
 			--output-file-name \
-				'$(DT)-$(SID)-gpt2_glove_test'
+				'$(DT)-$(SID)-correct-incorrect-enc'
 
 # -----------------------------------------------------------------------------
 # ERP
@@ -212,8 +217,8 @@ plot-erp:
 			--sid $(SID) \
 			--electrodes $(E_LIST) \
 			--input-directory \
-				20210201-1705-ca-4ms-all-correct-676-gpt2-xl-cnxt-1024-pca_0d \
-				20210201-1725-ca-4ms-all-incorrect-676-gpt2-xl-cnxt-1024-pca_0d \
+				20210208-1451-ca-200ms-all-correct-625-glove50-cnxt-1024-pca_0d \
+				20210208-1449-ca-200ms-all-incorrect-625-glove50-cnxt-1024-pca_0d \
 			--labels \
 				erp-correct \
 				erp-incorrect \

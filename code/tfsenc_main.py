@@ -62,6 +62,9 @@ def parse_arguments():
     parser.add_argument('--align-with', type=str, default=None)
     parser.add_argument('--align-target-context-length', type=int, default=0)
 
+    parser.add_argument('--split-flag', action='store_true', default=False)
+    parser.add_argument('--split-by', type=str, default=None)
+
     args = parser.parse_args()
 
     if not args.pca_flag:

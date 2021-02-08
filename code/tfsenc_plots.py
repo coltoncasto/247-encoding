@@ -59,8 +59,9 @@ def extract_correlations(args, directory_list, file_str=None):
 
     # all_corrs.shape = [len(directory_list), 1, num_lags]
     mean_corr = np.mean(all_corrs, axis=1)
+    sem_corr = np.std(all_corrs, axis=1, ddof=1) / np.sqrt(all_corrs.shape[1])
 
-    return all_corrs, mean_corr, electrode_list
+    return all_corrs, mean_corr, electrode_list, sem_corr
 
 
 def save_max_correlations(args, prod_max, comp_max, prod_list):
@@ -138,29 +139,42 @@ def set_legend_labels(args):
     return legend_labels
 
 
-def plot_data(args, data, pp, title=None):
+def plot_data(args, data, pp, title=None, sems=None):
     lags = np.arange(-5000, 5001, 25)
 
     fig, ax = plt.subplots()
-    color, linestyles = set_plot_styles(args)
+    # color, linestyles = set_plot_styles(args)
     # ax.set_prop_cycle(color=color, linestyle=linestyles)
+    ax.set_prop_cycle(color=['b','c','r','m'], linestyle=['-','-','-','-'])
     ax.plot(lags, data.T, linewidth=0.75)
     ax.legend(set_legend_labels(args), frameon=False)
     ax.set(xlabel=r'\textit{lag (s)}',
            ylabel=r'\textit{correlation}',
            title=title)
     ax.set_ylim(-0.05, 0.50)
-    ax.vlines(0, -0.05, 0.50, linestyles='dashed', linewidth=.75)
+    ax.vlines(0, -0.05, 0.50, 'k', linestyles='dashed', linewidth=.75)
+
+    if sems is not None: 
+        plt.fill_between(lags, data.T[:,0]-sems.T[:,0], data.T[:,0]+sems.T[:,0], 
+                            color='b', alpha=0.3)
+        plt.fill_between(lags, data.T[:,1]-sems.T[:,1], data.T[:,1]+sems.T[:,1], 
+                            color='c', alpha=0.3)
+        plt.fill_between(lags, data.T[:,2]-sems.T[:,2], data.T[:,2]+sems.T[:,2], 
+                            color='r', alpha=0.3)
+        plt.fill_between(lags, data.T[:,3]-sems.T[:,3], data.T[:,3]+sems.T[:,3], 
+                            color='m', alpha=0.3)
 
     pp.savefig(fig)
     plt.close()
 
 
 def plot_average_correlations_multiple(pp, prod_corr_mean, comp_corr_mean,
-                                       args):
+                                       prod_sem, comp_sem, args):
 
+    sems = np.vstack([prod_corr_mean, comp_corr_mean])
     data = np.vstack([prod_corr_mean, comp_corr_mean])
-    plot_data(args, data, pp, r'\textit{Average Correlation (all electrodes)}')
+    plot_data(args, data, pp, r'\textit{Average Correlation (all electrodes)}',
+                sems)
 
 
 def plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_list,
@@ -192,10 +206,10 @@ if __name__ == '__main__':
         for directory in args.input_directory
     ]
 
-    prod_corr, prod_corr_mean, prod_list = extract_correlations(
+    prod_corr, prod_corr_mean, prod_list, prod_sem = extract_correlations(
         args, results_dirs, 'prod')
 
-    comp_corr, comp_corr_mean, _ = extract_correlations(
+    comp_corr, comp_corr_mean, _, comp_sem = extract_correlations(
         args, results_dirs, 'comp')
 
     # Find maximum correlations (across all lags)
@@ -208,7 +222,7 @@ if __name__ == '__main__':
     pp = PdfPages(args.output_pdf)
 
     plot_average_correlations_multiple(pp, prod_corr_mean, comp_corr_mean,
-                                       args)
+                                       prod_sem, comp_sem, args)
 
     plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_list,
                                          args)
