@@ -83,32 +83,10 @@ def run_save_permutation(args, prod_Y, filename):
     perm_prod_mean = np.stack(perm_prod_mean)
     perm_prod_sem = np.stack(perm_prod_sem)
 
-    # import pdb; pdb.set_trace()
-
     output = np.concatenate((perm_prod_mean, perm_prod_sem))
     with open(filename, 'w') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerows(output)
-
-
-def load_header(conversation_dir, subject_id):
-    """[summary]
-
-    Args:
-        conversation_dir ([type]): [description]
-        subject_id (string): Subject ID
-
-    Returns:
-        list: labels
-    """
-    misc_dir = os.path.join(conversation_dir, subject_id, 'misc')
-    header_file = os.path.join(misc_dir, subject_id + '_header.mat')
-    if not os.path.exists(header_file):
-        return
-    header = mat73.loadmat(header_file)
-    labels = header.header.label
-
-    return labels
 
 
 def create_output_directory(args):
@@ -124,7 +102,7 @@ def create_output_directory(args):
     return full_output_dir
 
 
-def encoding_regression(args, sid, datum, elec_signal, name):
+def compute_erps(args, sid, datum, elec_signal, name):
 
     output_dir = args.full_output_dir
 
@@ -177,7 +155,7 @@ def setup_environ(args):
     args.signal_file = '_'.join([str(args.sid), 'trimmed_signal.pkl'])
     args.electrode_file = '_'.join([str(args.sid), 'electrode_names.pkl'])
 
-    args.output_dir = os.path.join(os.getcwd(), 'results/erp/')
+    args.output_dir = os.path.join(os.getcwd(), 'results', 'erp')
     args.full_output_dir = create_output_directory(args)
 
     vars(args).update(path_dict)

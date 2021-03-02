@@ -3,6 +3,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
+import gensim.downloader as api
 
 
 def load_pickle(file):
@@ -28,6 +29,18 @@ def drop_nan_embeddings(df):
 
     return df
 
+def get_vector(x, glove):
+    try:
+        return glove.get_vector(x)
+    except KeyError:
+        return None
+
+
+def gen_word2vec_embeddings(df):
+    glove = api.load('glove-wiki-gigaword-50')
+    df['embeddings'] = df['top1_pred'].apply(lambda x: get_vector(x, glove))
+    df = df[~df['embeddings'].isna()] # remove any empty embeddings
+    return df
 
 def read_datum(args):
     """Read and process the datum based on input arguments
@@ -48,6 +61,10 @@ def read_datum(args):
     df = pd.DataFrame.from_dict(datum)
     df = drop_nan_embeddings(df)
 
+    # only look at one conversation if requested
+    if args.conversation_id_flag:
+        df = df[df['conversation_id'] == args.conversation_id]
+        print(f'Conversation {args.conversation_id} has {len(df)} words')
 
     # use columns where token is root
     if 'gpt2' in [args.align_with, args.emb_type]:
@@ -70,7 +87,11 @@ def read_datum(args):
     if args.split_flag:
         if 'correct' == args.split_by:
             df = df[df.word == df.top1_pred]
-        elif 'incorrect' == args.split_by:
+        elif 'incorrect' in args.split_by:
             df = df[df.word != df.top1_pred]
+        
+        # replace embeddings of actual with glove of top1_pred
+        if 'predicted' in args.split_by:
+            df = gen_word2vec_embeddings(df)
 
     return df

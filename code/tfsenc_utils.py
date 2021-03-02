@@ -7,6 +7,8 @@ from numba import jit, prange
 from scipy import stats
 from sklearn.model_selection import KFold
 from tfsenc_phase_shuffle import phase_randomize
+from functools import partial
+from multiprocessing import Pool
 
 
 def encColCorr(CA, CB):
@@ -153,6 +155,9 @@ def build_Y(onsets, brain_signal, lags, window_size):
 
     return Y1
 
+def encoding_mp(_, args, prod_X, prod_Y):
+    perm_rc = encode_lags_numba(args, prod_X, prod_Y)
+    return perm_rc
 
 def build_XY(args, datum, brain_signal):
     """[summary]
@@ -210,11 +215,16 @@ def run_save_permutation(args, prod_X, prod_Y, filename):
     """
     if prod_X.shape[0]:
         perm_prod = []
-        for _ in range(args.npermutations):
+        for i in range(args.npermutations):
             perm_rc = encode_lags_numba(args, prod_X, prod_Y)
             perm_prod.append(perm_rc)
 
         perm_prod = np.stack(perm_prod)
+        # with Pool() as pool:
+        #     perm_prod = pool.map(
+        #         partial(encoding_mp, args=args, prod_X=prod_X, prod_Y=prod_Y),
+        #         range(args.npermutations))
+
         with open(filename, 'w') as csvfile:
             csvwriter = csv.writer(csvfile)
             csvwriter.writerows(perm_prod)
@@ -305,7 +315,7 @@ def setup_environ(args):
     args.signal_file = '_'.join([str(args.sid), 'trimmed_signal.pkl'])
     args.electrode_file = '_'.join([str(args.sid), 'electrode_names.pkl'])
 
-    args.output_dir = os.path.join(os.getcwd(), 'results')
+    args.output_dir = os.path.join(os.getcwd(), 'results', 'enc')
     args.full_output_dir = create_output_directory(args)
 
     vars(args).update(path_dict)

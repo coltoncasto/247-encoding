@@ -1,6 +1,7 @@
 import argparse
 import glob
 import os
+import csv
 import pickle
 from datetime import datetime
 
@@ -52,9 +53,8 @@ def parse_arguments():
     parser.add_argument('--npermutations', type=int, default=1)
     parser.add_argument('--min-word-freq', nargs='?', type=int, default=1)
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sid', nargs='?', type=int, default=None)
-    group.add_argument('--sig-elec-file', nargs='?', type=str, default=None)
+    parser.add_argument('--sid', type=int, default=None)
+    parser.add_argument('--sig-elec-file', type=str, default=None)
 
     parser.add_argument('--pca-flag', action='store_true', default=False)
     parser.add_argument('--reduce-to', type=int, default=0)
@@ -64,6 +64,9 @@ def parse_arguments():
 
     parser.add_argument('--split-flag', action='store_true', default=False)
     parser.add_argument('--split-by', type=str, default=None)
+
+    parser.add_argument('--conversation-id-flag', action='store_true', default=False)
+    parser.add_argument('--conversation-id', type=int, default=None)
 
     args = parser.parse_args()
 
@@ -163,19 +166,20 @@ def process_subjects(args, datum):
     electrode_info = load_pickle(
         os.path.join(args.PICKLE_DIR, str(args.sid), args.electrode_file))
 
-    # trimmed_signal = trimmed_signal_dict['trimmed_signal']
-
-    # if args.electrodes:
-    #     indices = [electrode_ids.index(i) for i in args.electrodes]
-
-    #     trimmed_signal = trimmed_signal[:, indices]
-    #     electrode_names = [electrode_names[i] for i in indices]
-
     if args.electrodes:
         electrode_info = {
             key: electrode_info.get(key, None)
             for key in args.electrodes
         }
+
+    # Read in the significant electrodes
+    if args.sig_elec_file:
+        SIG_DIR = os.path.join(os.getcwd(), 'results', 'sig_elecs')
+        sig_elec_file = os.path.join(SIG_DIR, args.sig_elec_file)
+        with open(sig_elec_file) as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            for row in csv_reader:
+                sig_elec_list = row # only one row
 
     # Loop over each electrode
     for elec_id, elec_name in electrode_info.items():
@@ -183,13 +187,15 @@ def process_subjects(args, datum):
         if elec_name is None:
             print(f'Electrode ID {elec_id} does not exist')
             continue
+        
+        if args.sig_elec_file:
+            if elec_name not in sig_elec_list:
+                print(f'Skipped Electrode ID {elec_id}, not significant')
+                continue
 
         elec_signal = load_electrode_data(args, elec_id)
-        # datum = load_processed_datum(args)
 
         encoding_regression(args, args.sid, datum, elec_signal, elec_name)
-
-    # write_electrodes(args, electrode_names)
 
     return
 
@@ -248,11 +254,8 @@ if __name__ == "__main__":
     if args.pca_flag:
         datum = run_pca(args, datum)
 
-    # Processing significant electrodes or individual subjects
-    if args.sig_elec_file:
-        process_sig_electrodes(args, datum)
-    else:
-        process_subjects(args, datum)
+    # Processing individual subjects
+    process_subjects(args, datum)
 
     end_time = datetime.now()
     print(f'End Time: {end_time.strftime("%A %m/%d/%Y %H:%M:%S")}')

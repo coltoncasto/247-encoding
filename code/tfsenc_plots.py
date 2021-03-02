@@ -145,6 +145,7 @@ def plot_data(args, data, pp, title=None, sems=None):
     fig, ax = plt.subplots()
     # color, linestyles = set_plot_styles(args)
     # ax.set_prop_cycle(color=color, linestyle=linestyles)
+    # ax.set_prop_cycle(color=['b','r'], linestyle=['-','-'])
     ax.set_prop_cycle(color=['b','c','r','m'], linestyle=['-','-','-','-'])
     ax.plot(lags, data.T, linewidth=0.75)
     ax.legend(set_legend_labels(args), frameon=False)
@@ -200,6 +201,7 @@ if __name__ == '__main__':
 
     assert len(args.input_directory) == len(args.labels), "Unequal number of"
 
+    print(args.input_directory)
     # Results folders to be plotted
     results_dirs = [
         glob.glob(os.path.join(os.getcwd(), 'results', directory))[0]
@@ -211,13 +213,6 @@ if __name__ == '__main__':
 
     comp_corr, comp_corr_mean, _, comp_sem = extract_correlations(
         args, results_dirs, 'comp')
-
-    # Find maximum correlations (across all lags)
-    prod_max = np.max(prod_corr, axis=-1)  # .reshape(-1, 1)
-    comp_max = np.max(comp_corr, axis=-1)  # .reshape(-1, 1)
-
-    # save correlations to a file
-    # save_max_correlations(args, prod_max, comp_max, prod_list)
 
     pp = PdfPages(args.output_pdf)
 

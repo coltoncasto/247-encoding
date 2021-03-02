@@ -3,6 +3,7 @@ import csv
 import glob
 import os
 import pickle
+import glob
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,18 +40,26 @@ def extract_correlations(args, directory_list, file_str=None):
     """
 
     # Load the subject's electrode file
-    electrode_list = list(load_pickle(args.electrode_file).values())
-    if args.electrodes is not None:
-        electrode_list = [electrode_list[idx-1] for idx in args.electrodes]
+    # electrode_list = list(load_pickle(args.electrode_file).values())
+    # if args.electrodes is not None:
+    #     electrode_list = [electrode_list[idx-1] for idx in args.electrodes]
 
     all_corrs = []
     all_sems = []
+    electrode_list = []
     for dir in directory_list:
+        correlation_files = glob.glob(os.path.join(dir, "*"))
+        correlation_files.sort()
 
         dir_corrs = []
         dir_sems = []
-        for electrode in electrode_list:
-            file = os.path.join(dir, electrode + '_' + file_str + '.csv')
+        for file in correlation_files:
+            # file = os.path.join(dir, electrode + '_' + file_str + '.csv')
+            electrode = file.split('/')[-1]
+            if file_str not in electrode:
+                continue
+            electrode_list.append(electrode[:-9])
+
             with open(file, 'r') as csv_file:
                 ha = list(map(float, csv_file.readline().strip().split(',')))
                 ha_sem = list(map(float, csv_file.readline().strip().split(',')))
@@ -60,7 +69,32 @@ def extract_correlations(args, directory_list, file_str=None):
         all_corrs.append(dir_corrs)
         all_sems.append(dir_sems)
 
-    # all_corrs.shape = [len(directory_list), len(electrode_list), num_lags]
+    # TODO - there is probably a more elegant way to do this...
+    # format for combined subjects (i.e., move x dims to 2 dims)
+    # assume that only 2 conditions can be given but infinite subjects
+    # import pdb; pdb.set_trace()
+    if args.combine_subjects:
+        all_corrs_new = []
+        all_sems_new = []
+        num_subs = len(all_corrs)/2
+
+        # iterate through 2 conditions
+        for i in range(0,2):
+            itr_list1 = all_corrs[i]
+            itr_list2 = all_sems[i]
+
+            # iterate through all subjects
+            for j in range(1, int(num_subs)):
+                itr_list1 += all_corrs[i+(2*j)]
+                itr_list2 += all_sems[i+(2*j)]
+
+            all_corrs_new.append(itr_list1)
+            all_sems_new.append(itr_list2)
+
+        all_corrs = all_corrs_new
+        all_sems = all_sems_new
+
+
     all_corrs = np.stack(all_corrs)
     all_sems = np.stack(all_sems)
 
@@ -102,6 +136,11 @@ def parse_arguments():
     parser.add_argument('--electrodes', nargs='*', type=int, default=[])
     parser.add_argument('--output-file-name', type=str, default=None)
 
+    parser.add_argument('--prod', action='store_true', default=False)
+    parser.add_argument('--comp', action='store_true', default=False)
+
+    parser.add_argument('--combine-subjects', action='store_true', default=False)
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sid', nargs='?', type=int, default=None)
     group.add_argument('--sig-elec-file', nargs='?', type=str, default=None)
@@ -137,28 +176,47 @@ def set_legend_labels(args):
 
 
 def plot_data(args, data, pp, sem, title=None):
+    # define x vector for plotting
     sample = 1/512
     lags = np.arange(-2, 2 + sample, sample)
 
     fig, ax = plt.subplots()
-    
-    ax.set_prop_cycle(color=['b','c','r','m'], linestyle=['-','-','-','-'])
+
+    # import pdb; pdb.set_trace()
+    # define colors given data
+    rows = data.shape[0]
+    if rows==1:
+        if args.prod:
+            colors = ['b']
+        else: 
+            colors = ['r']
+    elif rows==2:
+        if args.prod & args.comp:
+            colors = ['b','r']
+        elif args.prod:
+            colors = ['b','c']
+        else:
+            colors = ['r','m']
+    elif rows==4:
+        colors = ['b','c','r','m']
+    else:
+        print('wrong dimension given to plotting function')
+        return
+
+    ax.set_prop_cycle(color=colors)
     ax.plot(lags, data.T, linewidth=.75)
     ax.legend(set_legend_labels(args), frameon=False)
     ax.set(xlabel=r'\textit{onset (s)}',
            ylabel=r'\textit{event-related potential}',
            title=title)
+    # ax.set_ylim(-0.05, 0.50)
+    # ax.vlines(0, -0.05, 0.50, 'k', linestyles='dashed', linewidth=.75)
     ax.set_ylim(-.2, 1)
     ax.vlines(0, -.2, 1, 'k', linestyles='dashed', linewidth=1)
 
-    plt.fill_between(lags, data.T[:,0]-sem.T[:,0], data.T[:,0]+sem.T[:,0], 
-                     color='b', alpha=0.3)
-    plt.fill_between(lags, data.T[:,1]-sem.T[:,1], data.T[:,1]+sem.T[:,1], 
-                     color='c', alpha=0.3)
-    plt.fill_between(lags, data.T[:,2]-sem.T[:,2], data.T[:,2]+sem.T[:,2], 
-                     color='r', alpha=0.3)
-    plt.fill_between(lags, data.T[:,3]-sem.T[:,3], data.T[:,3]+sem.T[:,3], 
-                     color='m', alpha=0.3)
+    for i in range(0, rows):
+        plt.fill_between(lags, data.T[:,i]-sem.T[:,i], data.T[:,i]+sem.T[:,i], 
+                        color=colors[i], alpha=0.3)
 
     pp.savefig(fig)
     plt.close()
@@ -173,10 +231,16 @@ def plot_average_correlations_multiple(pp, prod_corr_mean, comp_corr_mean,
               r'\textit{Average ERP (all electrodes)}')
 
 
+def plot_average_correlations_one(pp, prod_corr_mean, prod_sem, args):
+
+    sem = np.vstack(prod_sem)
+    data = np.vstack(prod_corr_mean)
+    plot_data(args, data, pp, sem,
+              r'\textit{Average ERP (all electrodes)}')
+
+
 def plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_sem,
                                          comp_sem, prod_list, args):
-
-    
 
     prod_list = [item.replace('_', '\_') for item in prod_list]
     prod_corr = np.moveaxis(prod_corr, [0, 1, 2], [1, 0, 2])
@@ -191,6 +255,19 @@ def plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_sem,
         plot_data(args, data, pp, sem, electrode_id)
 
 
+def plot_individual_correlation_one(pp, prod_corr, prod_sem, prod_list, args):
+
+    prod_list = [item.replace('_', '\_') for item in prod_list]
+    prod_corr = np.moveaxis(prod_corr, [0, 1, 2], [1, 0, 2])
+    prod_sem = np.moveaxis(prod_sem, [0, 1, 2], [1, 0, 2])
+
+    for prod_row, sem_rowp, electrode_id in zip(prod_corr, 
+                                     prod_sem, prod_list):
+        data = prod_row
+        sem = sem_rowp
+        plot_data(args, data, pp, sem, electrode_id)
+
+
 if __name__ == '__main__':
     # Parse input arguments
     args = parse_arguments()
@@ -200,26 +277,39 @@ if __name__ == '__main__':
     args.electrode_file = os.path.join(os.getcwd(), 'data', str(args.sid),
                                        str(args.sid) + '_electrode_names.pkl')
 
-    assert len(args.input_directory) == len(args.labels), "Unequal number of"
-
     # Results folders to be plotted
     results_dirs = [
         glob.glob(os.path.join(os.getcwd(), 'results', 'erp', directory))[0]
         for directory in args.input_directory
     ]
 
-    prod_corr, prod_corr_mean, prod_list, prod_sem, all_semp = extract_correlations(
-        args, results_dirs, 'prod')
+    if args.prod:
+        prod_corr, prod_corr_mean, prod_list, prod_sem, all_semp = extract_correlations(
+            args, results_dirs, 'prod')
 
-    comp_corr, comp_corr_mean, _, comp_sem, all_semc = extract_correlations(
-        args, results_dirs, 'comp')
+    if args.comp:
+        comp_corr, comp_corr_mean, comp_list, comp_sem, all_semc = extract_correlations(
+            args, results_dirs, 'comp')
 
     pp = PdfPages(args.output_pdf)
 
-    plot_average_correlations_multiple(pp, prod_corr_mean, comp_corr_mean,
-                                       all_semp, all_semc, args)
+    # plot both production and comprehension
+    if args.prod & args.comp:
+        plot_average_correlations_multiple(pp, prod_corr_mean, comp_corr_mean,
+                                                all_semp, all_semc, args)
 
-    plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_sem, 
-                                         comp_sem, prod_list, args)
+        plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_sem, 
+                                                comp_sem, prod_list, args)
+    
+    # only plot production 
+    elif args.prod: 
+        plot_average_correlations_one(pp, prod_corr_mean, all_semp, args)
+        plot_individual_correlation_one(pp, prod_corr, prod_sem, prod_list, args)
+
+    # only plot comprehension
+    elif args.comp: 
+        plot_average_correlations_one(pp, comp_corr_mean, all_semc, args)
+        plot_individual_correlation_one(pp, comp_corr, comp_sem, comp_list, args)
+
 
     pp.close()

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --time=02:30:00
-#SBATCH --mem=128GB
+#SBATCH --mem=156GB
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=2
 #SBATCH -o './logs/%A.out'
@@ -12,7 +12,7 @@ if [[ "$HOSTNAME" == *"tiger"* ]]
 then
     echo "It's tiger"
     module load anaconda
-    source activate torch-env
+    source activate 247-main
 else
     module load anacondapy
     source activate srm
