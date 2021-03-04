@@ -84,7 +84,9 @@ def load_processed_datum(args):
             os.path.join(os.getcwd(), 'data', str(args.sid), 'conv_embeddings',
                          '*')))
     all_datums = []
-    for conversation in conversations:
+    for conversation in conversations[4:5]:
+        print(conversation)
+        raise Exception()
         datum = load_pickle(conversation)
         df = pd.DataFrame.from_dict(datum)
         df = process_datum(args, df)

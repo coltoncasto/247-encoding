@@ -13,6 +13,7 @@ NPERM := 2
 LAGS := {-50..50..25}
 # LAGS := 0
 EMB := gpt2-xl
+EMB := glove
 WS := 200
 CNXT_LEN := 1024
 ALIGN_WITH := gpt2-xl
@@ -21,8 +22,8 @@ ALIGN_TGT_CNXT_LEN := 1024
 MWF := 1
 WV := all
 
-SH := --shuffle
-# PSH := --phase-shuffle
+# SH := --shuffle
+PSH := --phase-shuffle
 # PCA := --pca-flag
 PCA_TO := 50
 

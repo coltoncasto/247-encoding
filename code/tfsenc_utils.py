@@ -328,7 +328,7 @@ def encoding_regression(args, datum, elec_signal, name):
 def setup_environ(args):
     """Update args with project specific directories and other flags
     """
-    PICKLE_DIR = os.path.join(os.getcwd(), 'data', str(args.sid), 'pickles')
+    PICKLE_DIR = os.path.join(os.getcwd(), 'data', str(args.sid))
     path_dict = dict(PICKLE_DIR=PICKLE_DIR)
 
     if args.emb_type == 'glove50':
