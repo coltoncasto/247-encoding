@@ -11,7 +11,7 @@ from scipy.io import loadmat
 
 from tfsenc_pca import run_pca
 from tfsenc_read_datum import read_datum
-from tfsenc_utils import encoding_regression, load_header, setup_environ
+from tfsenc_utils import encoding_regression, load_header, setup_environ, write_config
 
 
 def load_pickle(file):
@@ -56,6 +56,8 @@ def parse_arguments():
     parser.add_argument('--sid', type=int, default=None)
     parser.add_argument('--sig-elec-file', type=str, default=None)
 
+    parser.add_argument('--remove-glove', action='store_true', default=False)
+    
     parser.add_argument('--pca-flag', action='store_true', default=False)
     parser.add_argument('--reduce-to', type=int, default=0)
 
@@ -68,7 +70,15 @@ def parse_arguments():
     parser.add_argument('--conversation-id-flag', action='store_true', default=False)
     parser.add_argument('--conversation-id', type=int, default=None)
 
-    args = parser.parse_args()
+    custom_args = [
+        '--sid', '625',
+        '--electrodes', '1', '--emb-type', 'glove50',
+        '--context-length', '1024', '--align-with', 'gpt2-xl',
+        '--align-target-context-length', '1024', '--window-size', '200',
+        '--word-value', 'all', '--npermutations', '1', '--lags', '-100', '0',
+        '100', '--min-word-freq', '1', '--output-prefix', 'harsha-247-test'
+    ]
+    args = parser.parse_args(custom_args)
 
     if not args.pca_flag:
         args.reduce_to = 0
@@ -82,33 +92,21 @@ def parse_arguments():
     return args
 
 
-def trim_signal(signal):
-    bin_size = 32  # 62.5 ms (62.5/1000 * 512)
-    signal_length = signal.shape[0]
-
-    if signal_length < bin_size:
-        print("Ignoring conversation: Small signal")
-        return None
-
-    cutoff_portion = signal_length % bin_size
-    if cutoff_portion:
-        signal = signal[:-cutoff_portion, :]
-
-    return signal
-
-
 def load_electrode_data(args, elec_id):
     '''Loads specific electrodes mat files
     '''
     DATA_DIR = '/projects/HASSON/247/data/conversations-car'
     convos = sorted(glob.glob(os.path.join(DATA_DIR, str(args.sid), '*')))
-
+    # print(elec_id)
     all_signal = []
     for convo in convos:
+
         file = glob.glob(
             os.path.join(convo, 'preprocessed',
-                         '*' + str(elec_id) + '.mat'))[0]
+                         '*_' + str(elec_id) + '.mat'))[0]
         mat_signal = loadmat(file)['p1st']
+        
+        # print(file.split('/')[-1])
 
         # mat_signal = trim_signal(mat_signal)
 
@@ -117,47 +115,7 @@ def load_electrode_data(args, elec_id):
         all_signal.append(mat_signal)
 
     elec_signal = np.vstack(all_signal)
-
     return elec_signal
-
-
-def process_datum(args, df):
-    df['is_nan'] = df['embeddings'].apply(lambda x: np.isnan(x).all())
-
-    # drop empty embeddings
-    df = df[~df['is_nan']]
-
-    # use columns where token is root
-    if 'gpt2' in [args.align_with, args.emb_type]:
-        df = df[df['gpt2_token_is_root']]
-    elif 'bert' in [args.align_with, args.emb_type]:
-        df = df[df['bert_token_is_root']]
-    else:
-        pass
-
-    df = df[~df['glove50_embeddings'].isna()]
-
-    if args.emb_type == 'glove50':
-        df['embeddings'] = df['glove50_embeddings']
-
-    return df
-
-
-def load_processed_datum(args):
-    conversations = sorted(
-        glob.glob(
-            os.path.join(os.getcwd(), 'data', str(args.sid), 'conv_embeddings',
-                         '*')))
-    all_datums = []
-    for conversation in conversations:
-        datum = load_pickle(conversation)
-        df = pd.DataFrame.from_dict(datum)
-        df = process_datum(args, df)
-        all_datums.append(df)
-
-    concatenated_datum = pd.concat(all_datums, ignore_index=True)
-
-    return concatenated_datum
 
 
 def process_subjects(args, datum):
@@ -166,20 +124,28 @@ def process_subjects(args, datum):
     electrode_info = load_pickle(
         os.path.join(args.PICKLE_DIR, str(args.sid), args.electrode_file))
 
-    if args.electrodes:
+    # Read in the significant electrodes
+    if args.sig_elec_file:
+        SIG_DIR = os.path.join(os.getcwd(), 'results', 'sig-elecs')
+        sig_elec_file = os.path.join(SIG_DIR, args.sig_elec_file)
+        sig_elec_list = pd.read_csv(sig_elec_file)
+        sig_elec_list = sig_elec_list[sig_elec_list.subject == args.sid]
+
+
+        key_list = list(electrode_info.keys())
+        val_list = list(electrode_info.values())
+        positions = [val_list.index(value) for value in 
+                                        sig_elec_list.electrode.values]
+ 
+        key_list = [key_list[i] for i in positions]
+        electrode_info = dict(zip(key_list,sig_elec_list.electrode.values))
+
+    # use electrodes given in Makefile
+    else:
         electrode_info = {
             key: electrode_info.get(key, None)
             for key in args.electrodes
         }
-
-    # Read in the significant electrodes
-    if args.sig_elec_file:
-        SIG_DIR = os.path.join(os.getcwd(), 'results', 'sig_elecs')
-        sig_elec_file = os.path.join(SIG_DIR, args.sig_elec_file)
-        with open(sig_elec_file) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
-            for row in csv_reader:
-                sig_elec_list = row # only one row
 
     # Loop over each electrode
     for elec_id, elec_name in electrode_info.items():
@@ -188,52 +154,9 @@ def process_subjects(args, datum):
             print(f'Electrode ID {elec_id} does not exist')
             continue
         
-        if args.sig_elec_file:
-            if elec_name not in sig_elec_list:
-                print(f'Skipped Electrode ID {elec_id}, not significant')
-                continue
-
         elec_signal = load_electrode_data(args, elec_id)
 
         encoding_regression(args, args.sid, datum, elec_signal, elec_name)
-
-    return
-
-
-def process_sig_electrodes(args, datum):
-    """Run encoding on select significant electrodes specified by a file 
-    """
-    flag = 'prediction_presentation' if not args.tiger else ''
-
-    # Read in the significant electrodes
-    sig_elec_file = os.path.join(args.PROJ_DIR, flag, args.sig_elec_file)
-    sig_elec_list = pd.read_csv(sig_elec_file, header=None)[0].tolist()
-
-    # Loop over each electrode
-    for sig_elec in sig_elec_list:
-        subject_id, elec_name = sig_elec[:29], sig_elec[30:]
-
-        # Read subject's header
-        labels = load_header(args.CONV_DIR, subject_id)
-        if not labels:
-            print('Header Missing')
-        electrode_num = labels.index(elec_name)
-
-        # Read electrode data
-        brain_dir = os.path.join(args.CONV_DIR, subject_id, args.BRAIN_DIR_STR)
-        electrode_file = os.path.join(
-            brain_dir, ''.join([
-                subject_id, '_electrode_preprocess_file_',
-                str(electrode_num + 1), '.mat'
-            ]))
-        try:
-            elec_signal = loadmat(electrode_file)['p1st']
-        except FileNotFoundError:
-            print(f'Missing: {electrode_file}')
-            continue
-
-        # Perform encoding/regression
-        encoding_regression(args, subject_id, datum, elec_signal, elec_name)
 
     return
 
@@ -248,14 +171,19 @@ if __name__ == "__main__":
     # Setup paths to data
     args = setup_environ(args)
 
+    # Saving configuration to output directory
+    write_config(vars(args))
+
     # Locate and read datum
     datum = read_datum(args)
 
     if args.pca_flag:
         datum = run_pca(args, datum)
 
-    # Processing individual subjects
+    # processing individual subjects
     process_subjects(args, datum)
+
+
 
     end_time = datetime.now()
     print(f'End Time: {end_time.strftime("%A %m/%d/%Y %H:%M:%S")}')

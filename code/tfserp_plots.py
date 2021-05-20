@@ -5,10 +5,12 @@ import os
 import pickle
 import glob
 
+from itertools import repeat
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from statsmodels.stats import multitest
 from matplotlib.backends.backend_pdf import PdfPages
 
 # TODO: this file is work in progress
@@ -68,6 +70,15 @@ def extract_correlations(args, directory_list, file_str=None):
 
         all_corrs.append(dir_corrs)
         all_sems.append(dir_sems)
+    
+    # # TODO - make this cleaner
+    subject_list = []
+    subject_list += ['Subject 1'] * len(all_corrs[0]) 
+    subject_list += ['Subject 2'] * len(all_corrs[3])
+
+    size_list = []
+    size_list = list(repeat(["6,042","20,587"], len(all_corrs[0]))) # ["9,567","31,289"] ["6,042", "32,373"] ["15,419", "40,156"] ["10,779", "27,636"] ["1,395","1,926"]
+    size_list += list(repeat(["27,236","68,284"], len(all_corrs[3]))) # ["25,189","75,500"] ["27,236", "85,155"] ["33,939","86,153"] ["35,040","77,351"] ["2,291","2,461"]
 
     # TODO - there is probably a more elegant way to do this...
     # format for combined subjects (i.e., move x dims to 2 dims)
@@ -77,7 +88,14 @@ def extract_correlations(args, directory_list, file_str=None):
         all_corrs_new = []
         all_sems_new = []
         num_subs = len(all_corrs)/2
-
+        
+        electrode_list_new = []
+        electrode_list_new = electrode_list[:len(all_corrs[0])]
+        start = len(all_corrs[0])*2
+        electrode_list_new += electrode_list[
+                    start:start+len(all_corrs[2])]
+        electrode_list = electrode_list_new
+        
         # iterate through 2 conditions
         for i in range(0,2):
             itr_list1 = all_corrs[i]
@@ -94,7 +112,6 @@ def extract_correlations(args, directory_list, file_str=None):
         all_corrs = all_corrs_new
         all_sems = all_sems_new
 
-
     all_corrs = np.stack(all_corrs)
     all_sems = np.stack(all_sems)
 
@@ -102,7 +119,7 @@ def extract_correlations(args, directory_list, file_str=None):
     mean_corr = np.mean(all_corrs, axis=1)
     sem_corr = np.std(all_corrs, axis=1, ddof=1) / np.sqrt(all_corrs.shape[1])
 
-    return all_corrs, mean_corr, electrode_list, all_sems, sem_corr
+    return all_corrs, mean_corr, electrode_list, subject_list, size_list, all_sems, sem_corr
 
 
 def save_max_correlations(args, prod_max, comp_max, prod_list):
@@ -166,23 +183,7 @@ def initial_setup(args):
     return
 
 
-def set_legend_labels(args):
-    legend_labels = []
-
-    for item in ['production', 'comprehension']:
-        for label in args.labels:
-            legend_labels.append(r'\textit{' + '-'.join([label, item]) + '}')
-    return legend_labels
-
-
-def plot_data(args, data, pp, sem, title=None):
-    # define x vector for plotting
-    sample = 1/512
-    lags = np.arange(-2, 2 + sample, sample)
-
-    fig, ax = plt.subplots()
-
-    # import pdb; pdb.set_trace()
+def set_color(args, data): 
     # define colors given data
     rows = data.shape[0]
     if rows==1:
@@ -195,28 +196,79 @@ def plot_data(args, data, pp, sem, title=None):
             colors = ['b','r']
         elif args.prod:
             colors = ['b','c']
+            # colors = ['midnightblue','dodgerblue']
         else:
             colors = ['r','m']
+            # colors = ['darkred','orangered']
     elif rows==4:
         colors = ['b','c','r','m']
     else:
-        print('wrong dimension given to plotting function')
-        return
+        raise Exception('wrong dimension given to plotting function')
 
+    return colors
+
+
+def set_legend_labels(args, size=None):
+    legend_labels = []
+
+    if args.prod & args.comp: 
+        for item in ['production', 'comprehension']:
+            for label in args.labels:
+                legend_labels.append(r'\textit{' + '-'.join([label, item]) + '}')
+    
+    elif args.prod: 
+        for i, label in enumerate(args.labels):
+            if size is not None: 
+                legend_labels.append(f'{label} predicted (n={str(size[i])})')
+            else: 
+                legend_labels.append(r'\textit{' + ' '.join([label, 'predicted']) + '}')
+
+    else: 
+        for i, label in enumerate(args.labels):
+            if size is not None: 
+                legend_labels.append(f'{label} predicted (n={str(size[i])})')
+            else: 
+                legend_labels.append(r'\textit{' + ' '.join([label, 'predicted']) + '}')
+    
+    return legend_labels
+
+
+def plot_data(args, data, pp, title=None, sem=None, subtitle=None, size=None, sig=None, sig1=None):
+    sample = 1/512
+    lags = np.arange(-2, 2 + sample, sample)*1000
+
+    fig, ax = plt.subplots()
+    colors = set_color(args, data)
     ax.set_prop_cycle(color=colors)
-    ax.plot(lags, data.T, linewidth=.75)
-    ax.legend(set_legend_labels(args), frameon=False)
-    ax.set(xlabel=r'\textit{onset (s)}',
-           ylabel=r'\textit{event-related potential}',
-           title=title)
-    # ax.set_ylim(-0.05, 0.50)
-    # ax.vlines(0, -0.05, 0.50, 'k', linestyles='dashed', linewidth=.75)
-    ax.set_ylim(-.2, 1)
-    ax.vlines(0, -.2, 1, 'k', linestyles='dashed', linewidth=1)
 
-    for i in range(0, rows):
-        plt.fill_between(lags, data.T[:,i]-sem.T[:,i], data.T[:,i]+sem.T[:,i], 
-                        color=colors[i], alpha=0.3)
+    ax.plot(lags, data.T, linewidth=0.75)
+    if size is not None: 
+        legend_labels = [f'correct class (n={size[0]})',f'incorrect class (n={size[1]})']
+        # legend_labels = [f'most frequent words (n={size[0]})',f'least frequent words (n={size[1]})']
+    else: 
+        legend_labels = ['correct class', 'incorrect class']
+        # legend_labels = [f'most frequent words',f'least frequent words']
+    # ax.legend(legend_labels, frameon=False, prop={'size': 8})
+    ax.set(xlabel=r'\textit{lag (ms)}',
+           ylabel=r'\textit{Event-Related Potential (ERP)}')
+    ax.set_ylim(-0.2, 1)
+    ax.vlines(0, -0.2, 1, 'k', linestyles='dashed', linewidth=1)
+
+    if sig is not None:
+        plt.scatter(sig, np.ones((len(sig),1))*0.8, color='k', marker='.')
+    if sig1 is not None:
+        plt.scatter(sig1,  np.ones((len(sig1),1))*0.8, color='grey', marker='.')
+
+    if subtitle is not None: 
+        plt.suptitle(title, x = .52, y = .96)
+        plt.title(subtitle, size='medium')
+    else: 
+        plt.title(title)
+    
+    if sem is not None: 
+        for i in range(0, data.shape[0]):
+            plt.fill_between(lags, data.T[:,i]-sem.T[:,i], data.T[:,i]+sem.T[:,i], 
+                                color=colors[i], alpha=0.3)
 
     pp.savefig(fig)
     plt.close()
@@ -228,15 +280,15 @@ def plot_average_correlations_multiple(pp, prod_corr_mean, comp_corr_mean,
     sem = np.vstack([prod_sem, comp_sem])
     data = np.vstack([prod_corr_mean, comp_corr_mean])
     plot_data(args, data, pp, sem,
-              r'\textit{Average ERP (all electrodes)}')
+              r'\textit{Average ERP}')
 
 
-def plot_average_correlations_one(pp, prod_corr_mean, prod_sem, args):
+def plot_average_correlations_one(pp, prod_corr_mean, prod_sem, args, sig=None, sig1=None):
 
     sem = np.vstack(prod_sem)
     data = np.vstack(prod_corr_mean)
-    plot_data(args, data, pp, sem,
-              r'\textit{Average ERP (all electrodes)}')
+    plot_data(args, data, pp, f'Average ERP for Comprehension',
+                sem, r'(16 electrodes, 2 subjects)', sig=sig, sig1=sig1)
 
 
 def plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_sem,
@@ -255,17 +307,69 @@ def plot_individual_correlation_multiple(pp, prod_corr, comp_corr, prod_sem,
         plot_data(args, data, pp, sem, electrode_id)
 
 
-def plot_individual_correlation_one(pp, prod_corr, prod_sem, prod_list, args):
+def plot_individual_correlation_one(pp, prod_corr, prod_sem, prod_list, sub_list, size_list, args):
 
     prod_list = [item.replace('_', '\_') for item in prod_list]
     prod_corr = np.moveaxis(prod_corr, [0, 1, 2], [1, 0, 2])
     prod_sem = np.moveaxis(prod_sem, [0, 1, 2], [1, 0, 2])
 
-    for prod_row, sem_rowp, electrode_id in zip(prod_corr, 
-                                     prod_sem, prod_list):
+    for prod_row, sem_rowp, electrode_id, sub, size in zip(prod_corr, prod_sem, prod_list, sub_list, size_list):
         data = prod_row
         sem = sem_rowp
-        plot_data(args, data, pp, sem, electrode_id)
+        plot_data(args, data, pp, electrode_id, sem, subtitle=sub, size=size)
+
+    return
+
+
+def significant_difference(X1, X2, perm):
+    """Diff"""
+    n = len(X1)
+    diff = X1 - X2
+    distribution = np.zeros((1,perm))
+    
+    
+    for i in range(0,perm):
+        distribution[:,i] = np.mean(np.random.choice(diff,n))
+
+    val = np.sum(distribution > 0)
+    p_value = 1 - val/perm
+
+    return p_value
+
+
+def significant_lags(corrs):
+    """"""
+    perm = 1000
+    thresh = 0.01
+
+    p_values = []
+    for lag_idx in range(0,corrs.shape[2]):
+        p_value = significant_difference(corrs[1,:,lag_idx],corrs[0,:,lag_idx],perm)
+        p_values.append(p_value)
+    
+    _, pcor, _, _ = multitest.multipletests(p_values,
+                                            method='fdr_bh',
+                                            is_sorted=False)
+
+
+    sample = 1/512
+    lags = np.arange(-2, 2 + sample, sample)*1000
+    lags = lags[pcor < thresh]
+
+    p_values = []
+    for lag_idx in range(0,corrs.shape[2]):
+        p_value = significant_difference(corrs[0,:,lag_idx],corrs[1,:,lag_idx],perm)
+        p_values.append(p_value)
+    
+    _, pcor, _, _ = multitest.multipletests(p_values,
+                                            method='fdr_bh',
+                                            is_sorted=False)
+
+
+    sample = 1/512
+    lags1 = np.arange(-2, 2 + sample, sample)*1000
+    lags1 = lags1[pcor < thresh]
+    return lags, lags1
 
 
 if __name__ == '__main__':
@@ -284,11 +388,11 @@ if __name__ == '__main__':
     ]
 
     if args.prod:
-        prod_corr, prod_corr_mean, prod_list, prod_sem, all_semp = extract_correlations(
+        prod_corr, prod_corr_mean, prod_list, sub_list, size_list, prod_sem, all_semp = extract_correlations(
             args, results_dirs, 'prod')
 
     if args.comp:
-        comp_corr, comp_corr_mean, comp_list, comp_sem, all_semc = extract_correlations(
+        comp_corr, comp_corr_mean, comp_list, sub_list, size_list, comp_sem, all_semc = extract_correlations(
             args, results_dirs, 'comp')
 
     pp = PdfPages(args.output_pdf)
@@ -303,13 +407,17 @@ if __name__ == '__main__':
     
     # only plot production 
     elif args.prod: 
-        plot_average_correlations_one(pp, prod_corr_mean, all_semp, args)
-        plot_individual_correlation_one(pp, prod_corr, prod_sem, prod_list, args)
+        sig, sig1 = significant_lags(prod_corr)
+        import pdb; pdb.set_trace()
+        plot_average_correlations_one(pp, prod_corr_mean, all_semp, args,sig,sig1)
+        plot_individual_correlation_one(pp, prod_corr, prod_sem, prod_list, sub_list, size_list, args)
 
     # only plot comprehension
-    elif args.comp: 
-        plot_average_correlations_one(pp, comp_corr_mean, all_semc, args)
-        plot_individual_correlation_one(pp, comp_corr, comp_sem, comp_list, args)
+    elif args.comp:
+        sig, sig1 = significant_lags(comp_corr) 
+        import pdb; pdb.set_trace()
+        plot_average_correlations_one(pp, comp_corr_mean, all_semc, args,sig,sig1)
+        plot_individual_correlation_one(pp, comp_corr, comp_sem, comp_list, sub_list, size_list, args)
 
 
     pp.close()

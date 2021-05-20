@@ -10,27 +10,31 @@ DT := $(shell date +"%Y%m%d-%H%M")
 
 # 625 Electrode IDs
 E_LIST := $(shell seq 1 140)
-# E_LIST := 11 12 13 14 17 20 21 27 29 30 31 32 33 35 36 37 38 40 42 43 44 45 46 47 49 50 51 52 
-# E_LIST := 11 19 24 33 40 46 47 48 49 55
+# E_LIST := 1 20 72
 
 # 676 Electrode IDs
-# E_LIST := $(shell seq 1 1)
+E_LIST := $(shell seq 1 1)
 # E_LIST := $(shell seq 1 63)
 
 # Choose the subject to run for
 SID := 625
-SID := 676
+# SID := 676
 
 NPERM := 1
 # NPERM := 10
 
 # Choose the lags to run for.
 LAGS := {-5000..5000..25}
+LAGS := {-2000..2000..25}
+# LAGS := {-62000..-58000..25}
 # LAGS := 0
 
 # Choose which set of embeddings to use
 EMB := glove50
 # EMB := gpt2-xl
+
+# Choose whether to remove words without glove embeddings
+GLV := --remove-glove
 
 # Choose the window size to average for each point
 WS := 200
@@ -56,15 +60,22 @@ WV := all
 PCA_TO := 50
 
 # Choose how to split the datum, which subset to look at
-SPLIT := --split-flag
+# SPLIT := --split-flag
 SPLIT_BY := all
-SPLIT_BY := correct
-SPLIT_BY := incorrect
+# SPLIT_BY := correct
+# SPLIT_BY := incorrect
 # SPLIT_BY := incorrect-w-predicted
+# SPLIT_BY := most-frequent
+# SPLIT_BY := least-frequent
 
 # Choose significant electrodes based on threshold
-SIG := --sig-flag
-SIG_THRESH := .12 
+SIG := --sig-thresh-flag
+SIG := --sig-phase-shuffle-flag
+SIG_THRESH := .12 # correlation used w/ thresh
+SIG_THRESH := .01 # alpha used w/ phase shuffle
+
+# take intersection of significant electrodes with other list
+# INT = --intersection
 
 # prod/comp flags for plotting
 PROD := --prod
@@ -72,11 +83,14 @@ COMP := --comp
 
 # combine subjects for plotting 
 # e.g., take four directors and combine 1/3 and 2/4
-CMB := --combine-subjects
+# CMB := --combine-subjects
 
 # only look at one conversation for significant encodings
-CID := --conversation-id-flag
-CID_NUM := 63
+# CID := --conversation-id-flag
+CID_NUM := 5
+# CID_NUM := 63
+# CID_NUM := 53
+CID_NUM := 35
 
 # Choose the command to run: python runs locally, echo is for debugging, sbatch
 # is for running on SLURM all lags in parallel.
@@ -92,14 +106,16 @@ CMD := python
 # Run the encoding model for the given electrodes in one swoop
 # Note that the code will add the subject, embedding type, and PCA details to
 # the output folder name
+#		--sig-elec-file 
+#			sig_elecs_prod_test.csv 
+
 run-encoding:
 	mkdir -p logs
 	$(CMD) code/$(FILE).py \
 		--sid $(SID) \
 		--electrodes $(E_LIST) \
-		--sig-elec-file \
-			20210302-0855-676-glove50-sig-elecs-1-convo_comp.csv \
 		--emb-type $(EMB) \
+		$(GLV) \
 		--context-length $(CNXT_LEN) \
 		--align-with $(ALIGN_WITH) \
 		--align-target-context-length $(ALIGN_TGT_CNXT_LEN) \
@@ -116,20 +132,21 @@ run-encoding:
 		--split-by $(SPLIT_BY) \
 		$(CID) \
 		--conversation-id $(CID_NUM) \
-		--output-prefix $(DT)-$(USR)-$(WS)ms-$(SPLIT_BY)-test; \
+		--output-prefix $(DT)-$(USR)-$(WS)ms-$(SPLIT_BY)-harsha-test; \
 
 
 # Run the encoding model for the given electrodes __one at a time__, ideally
 # with slurm so it's all parallelized.
+# 			--sig-elec-file
+#				20210302-0855-676-glove50-sig-elecs-1-convo_comp.csv 
 run-encoding-slurm:
 	mkdir -p logs
 	for elec in $(E_LIST); do \
 		$(CMD) code/$(FILE).py \
 			--sid $(SID) \
 			--electrodes $$elec \
-			--sig-elec-file \
-				20210302-0855-676-glove50-sig-elecs-1-convo_comp.csv \
 			--emb-type $(EMB) \
+			$(GLV) \
 			--context-length $(CNXT_LEN) \
 			--align-with $(ALIGN_WITH) \
 			--align-target-context-length $(ALIGN_TGT_CNXT_LEN) \
@@ -149,18 +166,6 @@ run-encoding-slurm:
 			--output-prefix $(DT)-$(USR)-$(WS)ms-$(SPLIT_BY); \
 	done
 
-# create list of significant electrodes
-significant-electrodes:
-	mkdir -p results/sig_elecs
-	python code/tfsenc_sig_elecs.py \
-			--sid $(SID) \
-			$(SIG) \
-			--sig-thresh $(SIG_THRESH) \
-			--input-directory \
-				20210302-0825-ca-200ms-all-676-glove50-cnxt-1024-pca_0d-1-convo \
-			--output-file-name \
-				'$(DT)-$(SID)-$(EMB)-sig-elecs-1-convo'
-
 pca-on-embedding:
 	python code/tfsenc_pca.py \
 			--sid $(SID) \
@@ -176,13 +181,17 @@ plot-encoding:
 	mkdir -p results/enc/figures
 	python code/tfsenc_plots.py \
 			--sid $(SID) \
+			$(CMB) \
+			$(PROD) \
+			$(COMP) \
 			--electrodes $(E_LIST) \
 			--input-directory \
-				20210301-2148-ca-200ms-all-625-glove50-cnxt-1024-pca_0d \
+				20210415-1528-ca-200ms-all-convo-5-new-load-remove-gpt2-split-625-glove50-cnxt-1024-pca_0d \
 			--labels \
-				enc-glove \
+				correct \
+				incorrect-actual \
 			--output-file-name \
-				'$(DT)-$(SID)-glove-enc-one-conversation'
+				'$(DT)-$(SID)-enc-test'
 
 # -----------------------------------------------------------------------------
 # ERP
@@ -197,8 +206,9 @@ run-erp:
 		--sid $(SID) \
 		--electrodes $(E_LIST) \
 		--sig-elec-file \
-			20210302-0855-676-glove50-sig-elecs-1-convo_comp.csv \
+			sig_elecs_prod.csv \
 		--emb-type $(EMB) \
+		$(GLV) \
 		--context-length $(CNXT_LEN) \
 		--align-with $(ALIGN_WITH) \
 		--align-target-context-length $(ALIGN_TGT_CNXT_LEN) \
@@ -215,7 +225,7 @@ run-erp:
 		--split-by $(SPLIT_BY) \
 		$(CID) \
 		--conversation-id $(CID_NUM) \
-		--output-prefix $(DT)-$(USR)-$(WS_ERP)s-$(SPLIT_BY)-1-convo; \
+		--output-prefix $(DT)-$(USR)-$(WS_ERP)s-$(SPLIT_BY)-codebase-meeting-test; \
 
 
 # Run the encoding model for the given electrodes __one at a time__, ideally
@@ -227,6 +237,7 @@ run-erp-slurm:
 			--sid $(SID) \
 			--electrodes $$elec \
 			--emb-type $(EMB) \
+			$(GLV) \
 			--context-length $(CNXT_LEN) \
 			--align-with $(ALIGN_WITH) \
 			--align-target-context-length $(ALIGN_TGT_CNXT_LEN) \
@@ -257,16 +268,36 @@ plot-erp:
 			$(COMP) \
 			--electrodes $(E_LIST) \
 			--input-directory \
-				20210301-1946-ca-4s-correct-625-glove50-cnxt-1024-pca_0d \
-				20210301-1949-ca-4s-incorrect-625-glove50-cnxt-1024-pca_0d \
-				20210302-0011-ca-4s-correct-676-glove50-cnxt-1024-pca_0d \
-				20210302-0004-ca-4s-incorrect-676-glove50-cnxt-1024-pca_0d \
+				20210417-1230-ca-4s-correct-comp-thesis-625-glove50-cnxt-1024-pca_0d-subset \
+				20210417-1237-ca-4s-incorrect-comp-thesis-625-glove50-cnxt-1024-pca_0d-subset \
+				20210417-1233-ca-4s-correct-comp-thesis-676-glove50-cnxt-1024-pca_0d-subset \
+				20210417-1251-ca-4s-incorrect-comp-thesis-676-glove50-cnxt-1024-pca_0d-subset \
 			--labels \
-				erp-comp-sig-correct-combined \
-				erp-comp-sig-incorrect-combined \
+				correctly \
+				incorrectly \
 			--output-file-name \
-				'$(DT)-$(SID)-erp-corr-incorr-prod-sig-all-elecs-combined'
+				'$(DT)-erp-comp-thesis-subset-no-label-sig-test'
 
+# -----------------------------------------------------------------------------
+#  Significant electrodes
+# -----------------------------------------------------------------------------
+
+# create list of significant electrodes
+significant-electrodes:
+	mkdir -p results/sig-elecs
+	python code/tfsenc_sig_elecs.py \
+			--sid $(SID) \
+			$(SIG) \
+			--sig-thresh $(SIG_THRESH) \
+			$(INT) \
+			--intersection-file-comp \
+				sig_elecs_comp.csv \
+			--intersection-file-prod \
+				sig_elecs_prod.csv \
+			--input-directory \
+				harsha-test-625-1-convo-5 \
+			--output-file-name \
+				'$(DT)-$(SID)-$(EMB)-sig-elecs-thesis'
 
 # -----------------------------------------------------------------------------
 #  Misc. targets
@@ -275,6 +306,9 @@ plot-erp:
 # If you have pickled the data yourself, then you can just link to it
 link-data:
 	ln -fs $(shell dirname `pwd`)/247-pickling/results/* data/
+
+link-data-shuffled:
+	ln -fs /scratch/gpfs/hgazula/247-encoding/results/tfs/colton-phase-shuffle/* results/sig-elecs/phase-shuffle/
 
 sync-plots:
 	rsync -aPv --delete \

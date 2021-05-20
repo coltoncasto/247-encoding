@@ -12,6 +12,7 @@ from scipy import stats
 
 from tfsenc_pca import run_pca
 from tfsenc_read_datum import read_datum
+from tfsenc_utils import write_config
 from tfserp_utils import compute_erps, setup_environ
 
 
@@ -54,6 +55,7 @@ def parse_arguments():
     parser.add_argument('--npermutations', type=int, default=1)
     parser.add_argument('--min-word-freq', nargs='?', type=int, default=1)
 
+    parser.add_argument('--remove-glove', action='store_true', default=False)
 
     parser.add_argument('--sid', type=int, default=None)
     parser.add_argument('--sig-elec-file', type=str, default=None)
@@ -95,8 +97,10 @@ def load_electrode_data(args, elec_id):
         
         file = glob.glob(
             os.path.join(convo, 'preprocessed',
-                         '*' + str(elec_id) + '.mat'))[0]
+                         '*_' + str(elec_id) + '.mat'))[0]
         mat_signal = loadmat(file)['p1st']
+
+        # first difference from encoding
         mat_signal = stats.zscore(mat_signal)
 
         if mat_signal is None:
@@ -114,20 +118,28 @@ def process_subjects(args, datum):
     electrode_info = load_pickle(
         os.path.join(args.PICKLE_DIR, str(args.sid), args.electrode_file))
 
-    if args.electrodes:
+    # Read in the significant electrodes
+    if args.sig_elec_file:
+        SIG_DIR = os.path.join(os.getcwd(), 'results', 'sig-elecs')
+        sig_elec_file = os.path.join(SIG_DIR, args.sig_elec_file)
+        sig_elec_list = pd.read_csv(sig_elec_file)
+        sig_elec_list = sig_elec_list[sig_elec_list.subject == args.sid]
+
+
+        key_list = list(electrode_info.keys())
+        val_list = list(electrode_info.values())
+        positions = [val_list.index(value) for value in 
+                                        sig_elec_list.electrode.values]
+ 
+        key_list = [key_list[i] for i in positions]
+        electrode_info = dict(zip(key_list,sig_elec_list.electrode.values))
+
+    # use electrodes given in Makefile
+    else:
         electrode_info = {
             key: electrode_info.get(key, None)
             for key in args.electrodes
         }
-
-    # Read in the significant electrodes
-    if args.sig_elec_file:
-        SIG_DIR = os.path.join(os.getcwd(), 'results', 'sig_elecs')
-        sig_elec_file = os.path.join(SIG_DIR, args.sig_elec_file)
-        with open(sig_elec_file) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
-            for row in csv_reader:
-                sig_elec_list = row # only one row
 
     # Loop over each electrode
     for elec_id, elec_name in electrode_info.items():
@@ -135,11 +147,6 @@ def process_subjects(args, datum):
         if elec_name is None:
             print(f'Electrode ID {elec_id} does not exist')
             continue
-        
-        if args.sig_elec_file:
-            if elec_name not in sig_elec_list:
-                print(f'Skipped Electrode ID {elec_id}, not significant')
-                continue
 
         elec_signal = load_electrode_data(args, elec_id)
 
@@ -157,6 +164,9 @@ if __name__ == "__main__":
 
     # Setup paths to data
     args = setup_environ(args)
+
+    # Saving configuration to output directory
+    write_config(vars(args))
 
     # Locate and read datum
     datum = read_datum(args)

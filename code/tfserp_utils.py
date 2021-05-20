@@ -9,8 +9,8 @@ from sklearn.model_selection import KFold
 from tfsenc_phase_shuffle import phase_randomize
 
 
-@jit(nopython=True)
-def build_Y(onsets, brain_signal, lags, window_size):
+# @jit(nopython=True)
+def build_Y(onsets, convo_onsets, convo_offsets, brain_signal, window_size):
     """[summary]
 
     Args:
@@ -24,13 +24,12 @@ def build_Y(onsets, brain_signal, lags, window_size):
     """
 
     half_window = round((window_size * 512) / 2)
-    t = len(brain_signal)
 
     Y1 = np.zeros((len(onsets), half_window * 2 + 1))
 
     index_onsets = np.minimum(
-            t - half_window - 1,
-            np.maximum(half_window + 1,
+            convo_offsets - half_window - 1,
+            np.maximum(convo_onsets + half_window + 1,
                        np.round_(onsets, 0, onsets)))
 
     # subtracting 1 from starts to account for 0-indexing
@@ -38,7 +37,7 @@ def build_Y(onsets, brain_signal, lags, window_size):
     stops = index_onsets + half_window
 
     for i, (start, stop) in enumerate(zip(starts, stops)):
-            Y1[i, :] = brain_signal[start:stop].reshape(-1)
+            Y1[i, :] = brain_signal[int(start):int(stop)].reshape(-1)
 
 
     return Y1
@@ -60,7 +59,7 @@ def encode_lags_numba(args, Y):
 
     Y_mean = np.mean(Y, axis=0)
     Y_sem = np.std(Y, axis=0, ddof=1) / np.sqrt(Y.shape[0])
-
+    # import pdb; pdb.set_trace()
     return Y_mean, Y_sem
 
 
@@ -106,12 +105,16 @@ def compute_erps(args, sid, datum, elec_signal, name):
 
     output_dir = args.full_output_dir
 
-    onsets = datum.onset.values
+    onsets = datum.adjusted_onset.values
     lags = np.array(args.lags)
     brain_signal = elec_signal.reshape(-1, 1)
 
+    onsets = datum.adjusted_onset.values
+    convo_onsets = datum.conversation_onset
+    convo_offsets = datum.conversation_offset
+
     # Build design matrices
-    Y = build_Y(onsets, brain_signal, lags, args.window_size)
+    Y = build_Y(onsets, convo_onsets, convo_offsets, brain_signal, args.window_size)
 
     # Split into production and comprehension
     prod_Y = Y[datum.speaker == 'Speaker1', :]
@@ -154,6 +157,7 @@ def setup_environ(args):
 
     args.signal_file = '_'.join([str(args.sid), 'trimmed_signal.pkl'])
     args.electrode_file = '_'.join([str(args.sid), 'electrode_names.pkl'])
+    args.stitch_file = '_'.join([str(args.sid), 'full_stitch_index.pkl'])
 
     args.output_dir = os.path.join(os.getcwd(), 'results', 'erp')
     args.full_output_dir = create_output_directory(args)

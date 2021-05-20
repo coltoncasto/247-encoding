@@ -1,5 +1,6 @@
 import csv
 import os
+import json
 
 import mat73
 import numpy as np
@@ -117,8 +118,8 @@ def fit_model(X, y):
     return beta
 
 
-@jit(nopython=True)
-def build_Y(onsets, brain_signal, lags, window_size):
+# @jit(nopython=True)
+def build_Y(onsets, convo_onsets, convo_offsets, brain_signal, lags, window_size):
     """[summary]
 
     Args:
@@ -132,32 +133,27 @@ def build_Y(onsets, brain_signal, lags, window_size):
     """
 
     half_window = round((window_size / 1000) * 512 / 2)
-    t = len(brain_signal)
 
     Y1 = np.zeros((len(onsets), len(lags), 2 * half_window + 1))
 
     for lag in prange(len(lags)):
         lag_amount = int(lags[lag] / 1000 * 512)
 
+        # import pdb; pdb.set_trace()
         index_onsets = np.minimum(
-            t - half_window - 1,
-            np.maximum(half_window + 1,
+            convo_offsets - half_window - 1,
+            np.maximum(convo_onsets + half_window + 1,
                        np.round_(onsets, 0, onsets) + lag_amount))
 
         # subtracting 1 from starts to account for 0-indexing
         starts = index_onsets - half_window - 1
         stops = index_onsets + half_window
 
-        # vec = brain_signal[np.array([np.arange(*item) for item in zip(starts, stops)])]
-
         for i, (start, stop) in enumerate(zip(starts, stops)):
-            Y1[i, lag, :] = brain_signal[start:stop].reshape(-1)
+            Y1[i, lag, :] = brain_signal[int(start):int(stop)].reshape(-1)
 
     return Y1
 
-def encoding_mp(_, args, prod_X, prod_Y):
-    perm_rc = encode_lags_numba(args, prod_X, prod_Y)
-    return perm_rc
 
 def build_XY(args, datum, brain_signal):
     """[summary]
@@ -172,13 +168,15 @@ def build_XY(args, datum, brain_signal):
     """
     X = np.stack(datum.embeddings).astype('float64')
 
-    onsets = datum.onset.values
+    onsets = datum.adjusted_onset.values
+    convo_onsets = datum.conversation_onset
+    convo_offsets = datum.conversation_offset
 
     lags = np.array(args.lags)
     brain_signal = brain_signal.reshape(-1, 1)
 
-    Y = build_Y(onsets, brain_signal, lags, args.window_size)
-
+    Y = build_Y(onsets, convo_onsets, convo_offsets, brain_signal, 
+                                                lags, args.window_size)
     return X, Y
 
 
@@ -288,6 +286,17 @@ def encoding_regression(args, sid, datum, elec_signal, name):
 
     return
 
+def write_config(dictionary):
+    """Write configuration to a file
+    Args:
+        CONFIG (dict): configuration
+    """
+    json_object = json.dumps(dictionary, sort_keys=True, indent=4)
+
+    config_file = os.path.join(dictionary['full_output_dir'], 'config.json')
+    with open(config_file, "w") as outfile:
+        outfile.write(json_object)
+
 
 def setup_environ(args):
     """Update args with project specific directories and other flags
@@ -314,6 +323,7 @@ def setup_environ(args):
 
     args.signal_file = '_'.join([str(args.sid), 'trimmed_signal.pkl'])
     args.electrode_file = '_'.join([str(args.sid), 'electrode_names.pkl'])
+    args.stitch_file = '_'.join([str(args.sid), 'full_stitch_index.pkl'])
 
     args.output_dir = os.path.join(os.getcwd(), 'results', 'enc')
     args.full_output_dir = create_output_directory(args)
